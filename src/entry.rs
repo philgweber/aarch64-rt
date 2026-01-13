@@ -88,3 +88,46 @@ pub unsafe extern "C" fn secondary_entry(stack_end: *mut u64) -> ! {
         set_exception_vector = sym crate::set_exception_vector,
     )
 }
+
+/// An assembly entry point for warm boot (e.g. resume from suspend).
+///
+/// It will enable the MMU, disable trapping of floating point instructions,
+/// set up the exception vector, set the stack pointer to `stack_ptr`,
+/// and then jump to `entry_point(arg)`.
+///
+/// # Safety
+///
+/// `stack_ptr` must be a valid stack pointer.
+/// `entry_point` must be a valid function pointer taking one argument.
+#[unsafe(naked)]
+pub unsafe extern "C" fn warm_boot_entry<T>(context: *mut SuspendContext<T>) -> ! {
+    naked_asm!(
+        "bl enable_mmu",
+        // Disable trapping floating point access in EL1.
+        "mrs x30, cpacr_el1",
+        "orr x30, x30, #(0x3 << 20)",
+        "msr cpacr_el1, x30",
+        "isb",
+        // Load data from SuspendContext
+        "ldr x0, [x19, #{stack_ptr_offset}]",
+        "ldr x1, [x19, #{entry_offset}]",
+        // Set the exception vector.
+        "bl {set_exception_vector}",
+        // Set the stack pointer (x0).
+        "mov sp, x0",
+        // Jump to entry point (x1) with arg (x2).
+        "mov x0, x19",
+        "br x1",
+        set_exception_vector = sym crate::set_exception_vector,
+        stack_ptr_offset = const offset_of!(SuspendContext<T>, stack_ptr),
+        entry_offset = const offset_of!(SuspendContext<T>, entry),
+    )
+}
+
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct SuspendContext<T> {
+    pub stack_ptr: u64,
+    pub entry: extern "C" fn(&mut Self) -> !,
+    pub data: T,
+}
