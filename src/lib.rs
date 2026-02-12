@@ -32,7 +32,7 @@ use core::arch::asm;
 #[cfg(not(feature = "initial-pagetable"))]
 use core::arch::naked_asm;
 use core::mem::ManuallyDrop;
-pub use entry::{secondary_entry, warm_boot_entry, SuspendContext};
+pub use entry::{SuspendContext, secondary_entry, warm_boot_entry};
 #[cfg(feature = "exceptions")]
 pub use exceptions::{ExceptionHandlers, RegisterState, RegisterStateRef};
 #[cfg(all(feature = "initial-pagetable", feature = "el1"))]

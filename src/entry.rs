@@ -95,13 +95,30 @@ pub unsafe extern "C" fn secondary_entry(stack_end: *mut u64) -> ! {
 /// set up the exception vector, set the stack pointer to `stack_ptr`,
 /// and then jump to `entry_point(arg)`.
 ///
+/// The function expects to be passed a pointer to a `SuspendContext` instance
+/// that will be valid after returning from suspend. It should therefore be
+/// a static, or allocated on the heap, to avoid being deallocated before resuming.
+///
+/// This is a low-level function that should be used as the entry point when
+/// manually calling the `CPU_SUSPEND` PSCI call. It deliberately doesn't store any
+/// data itself so that the caller has maximum flexibility over things such as
+/// where the `SuspendContext` is stored. If you need to restore any state (such
+/// as the registers), or you want to emulate returning from a function after
+/// suspending the CPU, you need to implement this functionality yourself.
+///
 /// # Safety
 ///
-/// `stack_ptr` must be a valid stack pointer.
-/// `entry_point` must be a valid function pointer taking one argument.
+/// The caller guarantees that the `SuspendContext` instance passed to the function
+/// will be valid and safe to read when the CPU resumes (especially important when
+/// the data is wrapped in a mutex, for instance).
+///
+/// The `context` parameter has the following restrictions on its fields:
+/// * `stack_ptr` must be a valid stack pointer.
+/// * `entry` must be a valid function pointer taking `SuspendContext<T>`.
 #[unsafe(naked)]
-pub unsafe extern "C" fn warm_boot_entry<T>(context: *mut SuspendContext<T>) -> ! {
+pub unsafe extern "C" fn warm_boot_entry<T>(context: *const SuspendContext<T>) -> ! {
     naked_asm!(
+        "mov x19, x0",
         "bl enable_mmu",
         // Disable trapping floating point access in EL1.
         "mrs x30, cpacr_el1",
@@ -124,10 +141,11 @@ pub unsafe extern "C" fn warm_boot_entry<T>(context: *mut SuspendContext<T>) -> 
     )
 }
 
+/// Data used by [`warm_boot_entry`] to restore the CPU state after resuming.
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct SuspendContext<T> {
     pub stack_ptr: u64,
-    pub entry: extern "C" fn(&mut Self) -> !,
+    pub entry: extern "C" fn(&Self) -> !,
     pub data: T,
 }
