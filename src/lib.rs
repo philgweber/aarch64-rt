@@ -333,3 +333,36 @@ fn dsb_st() {
         asm!("dsb st", options(nostack));
     }
 }
+
+#[cfg(feature = "psci")]
+/// Issues a PSCI CPU_SUSPEND call to suspend the current CPU core.
+///
+/// If the PSCI CPU_SUSPEND call doesn't return, then on resume `warm_boot_entry` will be called to
+/// re-enable the MMU, set the given stack pointer, set the exception vector, and then call the
+/// given `entry` function with `data` as its parameter.
+///
+/// # Safety
+///
+/// `stack_ptr` must be a valid stack pointer to use for the resuming core. Depending on how you
+/// want to handle resuming this could either be the bottom of the stack (if you want to treat
+/// resuming like `CPU_ON`) or the top (if `entry` will restore register state and return from the
+/// point where the suspend happened).
+pub unsafe fn suspend_core<C: smccc::Call>(
+    power_state: u32,
+    stack_ptr: *mut u64,
+    entry: extern "C" fn(u64) -> !,
+    data: u64,
+) -> Result<(), smccc::psci::Error> {
+    let suspend_context = SuspendContext {
+        stack_ptr,
+        entry,
+        data,
+    };
+    // Passing a pointer to `suspend_context` is safe here, because it will remain valid until
+    // either `cpu_suspend` returns or the stack pointer is reset by `warm_boot_entry`.
+    smccc::psci::cpu_suspend::<C>(
+        power_state,
+        warm_boot_entry as u64,
+        (&raw const suspend_context) as u64,
+    )
+}
