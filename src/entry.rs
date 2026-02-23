@@ -92,7 +92,8 @@ pub unsafe extern "C" fn secondary_entry(stack_end: *mut u64) -> ! {
 /// An assembly entry point for warm boot (e.g. resume from suspend).
 ///
 /// It will enable the MMU, disable trapping of floating point instructions, set up the exception
-/// vector, set the stack pointer to `stack_ptr`, and then jump to `entry(arg)`.
+/// vector, set the stack pointer to `context.stack_ptr`, and then jump to
+/// `context.entry(context.arg)`.
 ///
 /// The function expects to be passed a pointer to a `SuspendContext` instance that will be valid
 /// after resuming from suspend. It should therefore be a static, allocated on the heap, or on the
@@ -125,23 +126,23 @@ pub unsafe extern "C" fn warm_boot_entry(context: *const SuspendContext) -> ! {
         "orr x30, x30, #(0x3 << 20)",
         "msr cpacr_el1, x30",
         "isb",
-        // Load stack pointer, entry point and data from SuspendContext. This may be on the stack,
+        // Load stack pointer, entry point and arg from SuspendContext. This may be on the stack,
         // so needs to happen before we set the stack pointer and call functions which may use the
         // stack.
         "ldr x19, [x0, #{stack_ptr_offset}]",
         "ldr x20, [x0, #{entry_offset}]",
-        "ldr x21, [x0, #{data_offset}]",
+        "ldr x21, [x0, #{arg_offset}]",
         // Set the stack pointer which was passed.
         "mov sp, x19",
         // Set the exception vector. This may use the stack and caller-saved registers.
         "bl {set_exception_vector}",
-        // Jump to entry point (x20) with data (x0).
+        // Jump to entry point (x20) with arg (x0).
         "mov x0, x21",
         "br x20",
         set_exception_vector = sym crate::set_exception_vector,
         stack_ptr_offset = const offset_of!(SuspendContext, stack_ptr),
         entry_offset = const offset_of!(SuspendContext, entry),
-        data_offset = const offset_of!(SuspendContext, data),
+        arg_offset = const offset_of!(SuspendContext, arg),
     )
 }
 
@@ -154,5 +155,5 @@ pub struct SuspendContext {
     /// Entry point to call after resuming.
     pub entry: extern "C" fn(u64) -> !,
     /// Parameter to pass to `entry`.
-    pub data: u64,
+    pub arg: u64,
 }

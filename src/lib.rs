@@ -339,7 +339,7 @@ fn dsb_st() {
 ///
 /// If the PSCI CPU_SUSPEND call doesn't return, then on resume `warm_boot_entry` will be called to
 /// re-enable the MMU, set the given stack pointer, set the exception vector, and then call the
-/// given `entry` function with `data` as its parameter.
+/// given `entry` function with `arg` as its parameter.
 ///
 /// # Safety
 ///
@@ -351,12 +351,12 @@ pub unsafe fn suspend_core<C: smccc::Call>(
     power_state: u32,
     stack_ptr: *mut u64,
     entry: extern "C" fn(u64) -> !,
-    data: u64,
+    arg: u64,
 ) -> Result<(), smccc::psci::Error> {
     let suspend_context = SuspendContext {
         stack_ptr,
         entry,
-        data,
+        arg,
     };
     // Passing a pointer to `suspend_context` is safe here, because it will remain valid until
     // either `cpu_suspend` returns or the stack pointer is reset by `warm_boot_entry`.
