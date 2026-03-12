@@ -154,7 +154,13 @@ pub unsafe extern "C" fn __enable_mmu_el1() {
         // Load and apply the memory management configuration, ready to enable MMU and
         // caches.
         "msr mair_el1, x8",
+
+        // Read current TTBR0_EL1 to preserve ASID bits [63:48]
+        "mrs x8, ttbr0_el1",
+        "and x12, x12, #0xFFFF000000000000",
+        "orr x11, x11, x12",
         "msr ttbr0_el1, x11",
+
         // Copy the supported PA range into TCR_EL1.IPS.
         "mrs x8, id_aa64mmfr0_el1",
         "bfi x10, x8, #32, #4",
